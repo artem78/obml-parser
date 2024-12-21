@@ -149,9 +149,13 @@ def data_url(buf):
         img_type = "image/png"
     elif buf.startswith(b"\xff\xd8"):
         img_type = "image/jpeg"
+    elif buf.startswith(b"RIFF") and buf[8:15] == b"WEBPVP8":
+        img_type = "image/webp"
     else:
         img_type = "application/octet-stream"
     encoded = base64.b64encode(buf)
+    print('img type:', img_type)
+    print('base64:', encoded)
     encoded = urllib.parse.quote(encoded)
     return "data:%s;base64,%s" % (img_type, encoded)
 
