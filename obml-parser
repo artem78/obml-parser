@@ -747,7 +747,17 @@ def process_one_file(arg):
                 fout.write('<script>\n')
                 box_ids = boxes_by_fileaddr.get(item["addr"])
                 if box_ids:
-                    fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
+                    #print('fout.name', fout.name)
+                    img_dir = fout.name + '_files'
+                    #print('img dir:', img_dir)
+                    img_file_path = os.path.join(img_dir, str(item["addr"]))
+                    img_file_path_rel = os.path.relpath(img_file_path, os.path.dirname(fout.name))
+                    if not os.path.exists(img_dir):
+                        os.makedirs(img_dir)
+                    with open(img_file_path, "wb") as img_file:
+                        img_file.write(item["data"])
+                    #fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
+                    fout.write('var bg = "url(\'%s\')";\n' % (img_file_path_rel))
                     for box_id in box_ids:
                         empty_boxes.remove(box_id)
                         fout.write('var div = document.getElementById("%s");\n' % box_id)
