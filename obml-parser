@@ -130,6 +130,9 @@ class BinaryReader():
             # earlier absolute coordinates (which are only used for sizes)
             pass
         return self.debug("-> coords[%s]" % ("rel" if rel_to_abs else "abs"), (x, y))
+        
+    def skip(self, length):
+        self.fh.seek(length, 1)
 
 def strhex(buf):
     return " ".join(["%02X" % x for x in buf])
@@ -160,7 +163,12 @@ def parse_file(arg):
     f = BinaryReader.from_path(arg)
 
     expected_size = f.read_medium()
+    print('expected size: ', expected_size)
     total_start = f.tell()
+    print('total_start:', total_start)
+    
+    f.skip(3)
+    
     version = f.read_byte()
     print("version =", version)
 
@@ -177,34 +185,41 @@ def parse_file(arg):
 
     exp_links_bytes = 0
 
-    if version not in {6, 12, 13, 15, 16}:
-        raise ValueError("unknown version %r" % version)
+    #if version not in {6, 12, 13, 15, 16}:
+    #    raise ValueError("unknown version %r" % version)
 
     page_size = f.read_coords()
-    if version == 16:
-        assert(f.read(2) in {b'\x00\x00', b'\xff\xff'})
-    else:
-        assert(f.read(5) == b'S\x00\x00\xff\xff')
+    f.skip(3)
+    #if version == 16:
+    #    assert(f.read(2) in {b'\x00\x00', b'\xff\xff'})
+    #else:
+    #    assert(f.read(5) == b'S\x00\x00\xff\xff')
+    assert(f.read(2) == b'\xff\xff')
     page_title = f.read_string()
+    print('page title: ', page_title)
     x = f.read_blob() # 'C\x10\x10...' on v15, nil elsewhere
     #print("Ignoring unknown header field:", repr(x))
     f.url_base = f.read_string()
+    print('url base:',f.url_base)
     page_url = f.read_url()
+    print('page url:', page_url)
     yield {"_type": "head",
            "title": page_title,
            "url": page_url,
            "dimensions": page_size}
 
-    if version >= 15:
-        x = f.read(6)
-        print("Ignoring unknown header fields:", repr(x))
-    elif version == 6:
-        x = f.read(1)
-        print("Ignoring unknown header fields:", repr(x))
-    else:
-        x1 = f.read_short()
-        x2 = f.read_medium()
-        print("Ignoring unknown header fields:", repr(x1), repr(x2))
+    #if version >= 15:
+    #    x = f.read(6)
+    #    print("Ignoring unknown header fields:", repr(x))
+    #elif version == 6:
+    #   x = f.read(1)
+    #   print("Ignoring unknown header fields:", repr(x))
+    #assert(x == 19 or x == 23)
+    #else:
+    #    x1 = f.read_short()
+    #    x2 = f.read_medium()
+    #    print("Ignoring unknown header fields:", repr(x1), repr(x2))
+    f.skip(6)
 
     # metadata section
 
@@ -279,13 +294,18 @@ def parse_file(arg):
                 pos = f.read_coords()
                 size = f.read_coords()
                 boxes.append((pos, size))
-            if version >= 15 or version == 13:
+            
+            print('offset:', f.tell())    
+            #if version >= 15 or version == 13:
+            if True:
                 link_url = f.read_url()
                 _ = f.read(2) # Usually "\x01t" in v15
                 link_type = f.read_string()
-            elif version in {12, 6}:
-                link_type = f.read_string()
-                link_url = f.read_url()
+            #elif version in {12, 6}:
+            #    link_type = f.read_string()
+            #    link_url = f.read_url()
+            print('link_type=', link_type, ' link_url=', link_url)
+                
             if type == b"i":
                 for pos, size in boxes:
                     if size[0] > 16 and size[1] > 16:
@@ -350,7 +370,7 @@ def parse_file(arg):
                        "type": link_type,
                        "pos": pos,
                        "size": size}
-        elif type in {b"C", b"I", b"N", b"S"} and version in {12, 6}:
+        elif type in {b"C", b"I", b"N", b"S"} : #and version in {12, 6}:
             # Unknown link types.
             # All follow the common <=12 'region' format.
             n = f.read_byte()
@@ -360,6 +380,7 @@ def parse_file(arg):
                 size = f.read_coords()
                 boxes.append((pos, size))
             x1 = f.read_blob()
+            f.skip(2)
             x2 = f.read_blob()
             print("Ignoring unknown link chunk:", repr(type), boxes, repr(x1), repr(x2))
             #if type in {}:
@@ -372,6 +393,7 @@ def parse_file(arg):
             #               "size": size}
         else:
             raise ValueError("unknown link chunk %r/v%r" % (type, version))
+            #print("unknown link chunk %r/v%r" % (type, version))
 
     print("section 2 ends at %d" % f.tell())
     if f.tell() != links_end:
@@ -444,8 +466,9 @@ def parse_file(arg):
         elif type == b"I":
             # Image area (pointer to a PNG blob)
             addr = 0
-            if version == 16:
-                pos = f.read_coords(rel_to_abs=True)
+            if True : #version == 16:
+                #pos = f.read_coords(rel_to_abs=True)
+                pos = f.read_coords()
                 size = f.read_coords()
                 color = f.read_color()
                 addr = f.read_medium()
@@ -513,7 +536,7 @@ def parse_file(arg):
             break
         elif type == b"T":
             # Text
-            if version == 16:
+            if True: #version == 16:
                 pos = f.read_coords(rel_to_abs=True)
                 size = f.read_coords()
                 color = f.read_color()
@@ -554,7 +577,8 @@ def parse_file(arg):
 
     print("section 3 started at %d, ends at %d" % (content_start, f.tell()))
     if f.tell() != content_end:
-        raise ValueError("content section ended at %d, expected %d" % (f.tell(), content_end))
+        #raise ValueError("content section ended at %d, expected %d" % (f.tell(), content_end))
+        print("[WARN] content section ended at %d, expected %d" % (f.tell(), content_end))
 
 
 def process_one_file(arg):
