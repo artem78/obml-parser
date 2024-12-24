@@ -17,6 +17,9 @@ import os
 import struct
 import sys
 import urllib.parse
+from PIL import Image
+from io import BytesIO
+import shutil
 
 from pprint import pprint
 
@@ -309,6 +312,8 @@ def parse_file(arg):
             #    link_type = f.read_string()
             #    link_url = f.read_url()
             print('link_type=', link_type, ' link_url=', link_url)
+            #for pos, size in boxes:
+            #    print('  - pos:', pos, '  size:', size)
                 
             if type == b"i":
                 for pos, size in boxes:
@@ -497,6 +502,9 @@ def parse_file(arg):
                 _x = f.read(3) # medium_int (usually 0, 2, 4)
                 #print("Ignoring unknown image fields:", repr(type), repr(_x))
                 addr = f.read_medium()
+                
+            #print('pos:', pos, 'size:', size)
+                
             yield {"_type": "box",
                    "kind": "image",
                    "pos": pos,
@@ -593,6 +601,10 @@ def process_one_file(arg):
         option_lists = {}
         n_option_lists = itertools.count()
         n_select_fields = itertools.count()
+        img_areas = []
+        img_dir = fout.name + '_files'
+        if os.path.exists(img_dir):
+            shutil.rmtree(img_dir)
 
         fout.write('<!DOCTYPE html>\n')
         fout.write('<meta charset="utf-8">\n')
@@ -690,6 +702,24 @@ def process_one_file(arg):
                     fout.write('<div class="item img" style="%s" id="%s"></div>\n' % (style, box_id))
                     empty_boxes.add(box_id)
                     boxes_by_fileaddr.setdefault(item["blob"], []).append(box_id)
+                    
+                    #pprint(item)
+                    
+                    for it in img_areas:
+                        if it['x'] <= item_x and it['y'] <= item_y \
+                                and (it['x'] + it['w']) >= (item_x + item_w) \
+                                and (it['y'] + it['h']) >= (item_y + item_h):
+                            it.setdefault("data", [])
+                            it['data'].append({'box_id': box_id,
+                                               'x': item_x - it['x'], # relative to image start
+                                               'y': item_y - it['y'],
+                                               'w': item_w,
+                                               'h': item_h})
+                            #if not 'first_chunk_addr' in it:
+                            #    it['first_chunk_addr'] = item['addr']
+                            break
+                    # todo: raise если не нашёл
+                    
                 else:
                     fout.write('<div class="item box" style="%s"></div>\n' % style)
             elif type == "option_list":
@@ -728,6 +758,12 @@ def process_one_file(arg):
                         "top: %dpx" % item_y,
                     ]
                     text = "↖"
+                    img_areas.append({
+                        'x': item_x - 1, # 1px outer
+                        'y': item_y - 1,
+                        'w': item_w + 2,
+                        'h': item_h + 2
+                    })
                 elif item.get("kind") == "unknown":
                     klass = "link unknownlink"
                     style = []
@@ -747,15 +783,65 @@ def process_one_file(arg):
                 fout.write('<script>\n')
                 box_ids = boxes_by_fileaddr.get(item["addr"])
                 if box_ids:
+                    #pprint(item)
                     #print('fout.name', fout.name)
-                    img_dir = fout.name + '_files'
+                    #img_dir = fout.name + '_files'
                     #print('img dir:', img_dir)
-                    img_file_path = os.path.join(img_dir, str(item["addr"]))
+                    
+                    img_chunk_x = 0
+                    img_chunk_y = 0
+                    img_chunk_w = 0
+                    img_chunk_h = 0
+                    img_total_y = 0
+                    img_total_x = 0
+                    img_total_w = 0
+                    img_total_h = 0
+                    img_id = ''
+                    img_chunked = False
+                    for it1 in img_areas:
+                        for it2 in it1['data']:
+                            if it2['box_id'] == box_ids[0]: # !!!
+                                img_chunk_x = it2['x']
+                                img_chunk_y = it2['y']
+                                img_chunk_w = it2['w']
+                                img_chunk_h = it2['h']
+                                img_total_w = it1['w']
+                                img_total_h = it1['h']
+                                img_total_x = it1['x']
+                                img_total_y = it1['y']
+                                img_chunked = not(img_chunk_w == img_total_w
+                                                  and img_chunk_h == img_total_h) 
+                                break
+                            # break
+                    img_id = '%d_%d_%d_%d' % (img_total_x, img_total_y, img_total_w, img_total_h)
+                            
+                    
+                    #img_file_path = os.path.join(img_dir, str(item["addr"]))
+                    img_file_path = os.path.join(img_dir, img_id)
                     img_file_path_rel = os.path.relpath(img_file_path, os.path.dirname(fout.name))
+                         
                     if not os.path.exists(img_dir):
                         os.makedirs(img_dir)
-                    with open(img_file_path, "wb") as img_file:
-                        img_file.write(item["data"])
+                            
+                    if img_chunked:
+                        with Image.open(BytesIO(item['data'])) as img_chunk:
+                            if not os.path.exists(img_file_path): # first image chunk
+                                img = Image.new('RGB', (img_total_w, img_total_h))
+                            else: # 2,3,4... chunk
+                                img = Image.open(img_file_path)
+                                
+                            img.paste(img_chunk, (img_chunk_x, img_chunk_y));
+                            img.save(img_file_path, format=img_chunk.format)
+                            del img
+                        
+                            
+                    else:
+                        with open(img_file_path, "wb") as img_file:
+                            img_file.write(item["data"])
+                    
+                    
+
+
                     #fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
                     fout.write('var bg = "url(\'%s\')";\n' % (img_file_path_rel))
                     for box_id in box_ids:
@@ -763,6 +849,9 @@ def process_one_file(arg):
                         fout.write('var div = document.getElementById("%s");\n' % box_id)
                         fout.write('div.style.backgroundImage = bg;\n')
                         fout.write('div.style.backgroundColor = "";\n')
+                        if img_chunked:
+                            fout.write('div.style.backgroundPosition = "%dpx %dpx";\n' % (-img_chunk_x, -img_chunk_y))
+                            fout.write('div.style.backgroundSize = "auto";\n')
                 else:
                     fout.write('/* file @ %r not referenced by any image */\n' % item["addr"])
                     print("warning: file @ %r was not referenced by any image" % item["addr"], file=sys.stderr)
@@ -770,6 +859,10 @@ def process_one_file(arg):
         for box_id in sorted(empty_boxes):
             print("warning: image box %r is missing a file" % box_id, file=sys.stderr)
 
+    #print('boxes')
+    #pprint(boxes_by_fileaddr)
+    #print('img_areas:')
+    #pprint(img_areas)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("obml_file", nargs="*")
