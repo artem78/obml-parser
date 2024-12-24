@@ -762,7 +762,8 @@ def process_one_file(arg):
                         'x': item_x - 1, # 1px outer
                         'y': item_y - 1,
                         'w': item_w + 2,
-                        'h': item_h + 2
+                        'h': item_h + 2,
+                        'filename': os.path.basename(urllib.parse.urlparse(item['href']).path)
                     })
                 elif item.get("kind") == "unknown":
                     klass = "link unknownlink"
@@ -798,7 +799,10 @@ def process_one_file(arg):
                     img_total_h = 0
                     img_id = ''
                     img_chunked = False
+                    img_filename = ''
+                    img_chunk_idx = 0
                     for it1 in img_areas:
+                        img_chunk_idx = 0
                         for it2 in it1['data']:
                             if it2['box_id'] == box_ids[0]: # !!!
                                 img_chunk_x = it2['x']
@@ -811,13 +815,19 @@ def process_one_file(arg):
                                 img_total_y = it1['y']
                                 img_chunked = not(img_chunk_w == img_total_w
                                                   and img_chunk_h == img_total_h) 
+                                img_filename = it1['filename']
                                 break
+                            else:
+                                img_chunk_idx += 1
                             # break
-                    img_id = '%d_%d_%d_%d' % (img_total_x, img_total_y, img_total_w, img_total_h)
-                            
+                    
+                    if not img_filename:
+                        img_filename = '%d_%d_%d_%d' % (img_total_x, img_total_y, img_total_w, img_total_h)
+                        print('warning: image with addr=%s has no filename, set to "%s"' % (item["addr"], img_filename))
                     
                     #img_file_path = os.path.join(img_dir, str(item["addr"]))
-                    img_file_path = os.path.join(img_dir, img_id)
+                    img_file_path = os.path.join(img_dir, img_filename)
+                    #img_file_path = make_unique_filename(img_file_path)
                     img_file_path_rel = os.path.relpath(img_file_path, os.path.dirname(fout.name))
                          
                     if not os.path.exists(img_dir):
@@ -825,6 +835,7 @@ def process_one_file(arg):
                             
                     if img_chunked:
                         with Image.open(BytesIO(item['data'])) as img_chunk:
+                            #if img_chunk_idx == 0: # first image chunk
                             if not os.path.exists(img_file_path): # first image chunk
                                 img = Image.new('RGB', (img_total_w, img_total_h))
                             else: # 2,3,4... chunk
@@ -863,6 +874,14 @@ def process_one_file(arg):
     #pprint(boxes_by_fileaddr)
     #print('img_areas:')
     #pprint(img_areas)
+    
+def make_unique_filename(filename):
+    counter = 1
+    name, extension = os.path.splitext(filename)
+    while os.path.exists(filename):
+        filename = f"{name}_{counter}{extension}"
+        counter += 1
+    return filename
 
 parser = argparse.ArgumentParser()
 parser.add_argument("obml_file", nargs="*")
