@@ -21,6 +21,7 @@ from PIL import Image
 from io import BytesIO
 import shutil
 #import random
+from pathvalidate import sanitize_filename
 
 from pprint import pprint
 
@@ -118,7 +119,10 @@ class ImageData():
                 
     @property
     def real_filename(self):
-        return os.path.basename(urllib.parse.urlparse(self.url).path)
+        fname = os.path.basename(urllib.parse.urlparse(self.url).path)
+        fname = urllib.parse.unquote(fname)
+        fname = sanitize_filename(fname, replacement_text='_')
+        return fname
     
     @property
     def unique_filename(self):
@@ -960,7 +964,7 @@ def process_one_file(arg):
 
 
                     #fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
-                    fout.write('var bg = "url(\'%s\')";\n' % (img_file_path_rel))
+                    fout.write('var bg = "url(\'%s\')";\n' % (urllib.parse.quote(img_file_path_rel)))
                     for box_id in box_ids:
                         empty_boxes.remove(box_id)
                         fout.write('var div = document.getElementById("%s");\n' % box_id)
