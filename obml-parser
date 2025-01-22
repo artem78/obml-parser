@@ -35,12 +35,13 @@ font_sizes = {
 line_height = "1.1"
 
 class ImageChunkData():
-    def __init__(self, box_id, x, y, w, h):
-        self.box_id = box_id
+    def __init__(self, box_id, x, y, w, h, addr):
+        #self.box_id = box_id - box_id not used
         self.x = x # координаты относительно
         self.y = y # начала документа
         self.w = w
         self.h = h
+        self.addr = addr
         self.owner = None
         self.data = None
         
@@ -187,11 +188,19 @@ class ImageCombiner():
         
         return None
     
-    def get_chunk_by_box_id(self, box_id):
+    # def get_chunk_by_box_id(self, box_id):
+    #     for img in self.imgs:
+    #         for chunk in img.chunks:
+    #             if chunk.box_id == box_id:
+    #                 return chunk
+    #     return None
+    
+    def get_chunk_by_addr(self, addr):
         for img in self.imgs:
             for chunk in img.chunks:
-                if chunk.box_id == box_id:
+                if chunk.addr == addr:
                     return chunk
+                
         return None
     
     def make_unique_filename(self, filename):
@@ -883,7 +892,7 @@ def process_one_file(arg):
                     
                     #pprint(item)
                     
-                    img_cmb.add_chunk(ImageChunkData(box_id, item_x, item_y, item_w, item_h))
+                    img_cmb.add_chunk(ImageChunkData(box_id, item_x, item_y, item_w, item_h, item["blob"]))
                     
                 else:
                     fout.write('<div class="item box" style="%s"></div>\n' % style)
@@ -952,7 +961,7 @@ def process_one_file(arg):
                     #img_dir = fout.name + '_files'
                     #print('img dir:', img_dir)
                     
-                    img_chunk = img_cmb.get_chunk_by_box_id(box_ids[0]) # box_ids[0] - ???
+                    img_chunk = img_cmb.get_chunk_by_addr(item["addr"])
                     img_chunk.data = item["data"]
                     
                     if img_chunk.owner.is_data_complete:
