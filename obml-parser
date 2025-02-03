@@ -175,7 +175,8 @@ class ImageCombiner():
     def add_chunk(self, chunk):
         img_idx = self.img_idx_by_chunk(chunk)
         if img_idx is None:
-            raise Exception("No image found for given chunk") 
+#            raise Exception("No image found for given chunk")
+            return 
         chunk.owner = self.imgs[img_idx]
         self.imgs[img_idx].chunks.append(chunk)
     
@@ -962,26 +963,29 @@ def process_one_file(arg):
                     #print('img dir:', img_dir)
                     
                     img_chunk = img_cmb.get_chunk_by_addr(item["addr"])
-                    img_chunk.data = item["data"]
-                    
-                    if img_chunk.owner.is_data_complete:
-                        img_chunk.owner.save()
+                    if img_chunk is not None:
+                        img_chunk.data = item["data"]
                         
-                    img_file_path_rel = os.path.relpath(img_chunk.owner.unique_filepath,
-                                                        os.path.dirname(fout.name))
-                    
-
-
-                    #fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
-                    fout.write('var bg = "url(\'%s\')";\n' % (urllib.parse.quote(img_file_path_rel)))
-                    for box_id in box_ids:
-                        empty_boxes.remove(box_id)
-                        fout.write('var div = document.getElementById("%s");\n' % box_id)
-                        fout.write('div.style.backgroundImage = bg;\n')
-                        fout.write('div.style.backgroundColor = "";\n')
-                        if img_chunk.owner.is_chunked:
-                            fout.write('div.style.backgroundPosition = "%dpx %dpx";\n' % (-img_chunk.rel_x, -img_chunk.rel_y))
-                            fout.write('div.style.backgroundSize = "auto";\n')
+                        if img_chunk.owner.is_data_complete:
+                            img_chunk.owner.save()
+                            
+                        img_file_path_rel = os.path.relpath(img_chunk.owner.unique_filepath,
+                                                            os.path.dirname(fout.name))
+                        
+    
+    
+                        #fout.write('var bg = "%s";\n' % css_imgdata(item["data"]))
+                        fout.write('var bg = "url(\'%s\')";\n' % (urllib.parse.quote(img_file_path_rel)))
+                        for box_id in box_ids:
+                            empty_boxes.remove(box_id)
+                            fout.write('var div = document.getElementById("%s");\n' % box_id)
+                            fout.write('div.style.backgroundImage = bg;\n')
+                            fout.write('div.style.backgroundColor = "";\n')
+                            if img_chunk.owner.is_chunked:
+                                fout.write('div.style.backgroundPosition = "%dpx %dpx";\n' % (-img_chunk.rel_x, -img_chunk.rel_y))
+                                fout.write('div.style.backgroundSize = "auto";\n')
+                    else:
+                        print("warning: img chunk data not found for addr={}".format(item["addr"]), file=sys.stderr)
                 else:
                     fout.write('/* file @ %r not referenced by any image */\n' % item["addr"])
                     print("warning: file @ %r was not referenced by any image" % item["addr"], file=sys.stderr)
@@ -991,7 +995,7 @@ def process_one_file(arg):
 
     #print('boxes')
     #pprint(boxes_by_fileaddr)
-    #pprint(img_cmb)
+    pprint(img_cmb)
 
 
 parser = argparse.ArgumentParser()
